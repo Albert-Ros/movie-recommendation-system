@@ -1,5 +1,7 @@
+#links <- read.csv("links.csv")
 movies <- read.csv("movies.csv",stringsAsFactors=FALSE)
 ratings <- read.csv("ratings.csv")
+#tags <- read.csv("tags.csv")
 
 library(recommenderlab)
 library(ggplot2)
@@ -48,6 +50,9 @@ colnames(search_matrix) <- c("movieId", "title", "year", genre_list)
 
 write.csv(search_matrix, "search.csv")
 search_matrix <- read.csv("search.csv", stringsAsFactors=FALSE)
+
+# Example of search an Action movie produced in 1995:
+subset(search_matrix, Action == 1 & year == 1995)$title
 
 ## Create a user profile
 binaryratings <- ratings
@@ -108,6 +113,11 @@ for (c in 1:ncol(result)){
   }
 }
 
+## Assume that users like similar items, and retrieve movies 
+# that are closest in similarity to a user's profile, which 
+# represents a user's preference for an item's feature.
+# use Jaccard Distance to measure the similarity between user profiles
+
 # The User-Based Collaborative Filtering Approach
 
 library(reshape2)
@@ -145,6 +155,35 @@ unique(vector_ratings) # what are unique values of ratings
 table_ratings <- table(vector_ratings) # what is the count of each rating value
 table_ratings
 
+# Visualize the rating:
+vector_ratings <- vector_ratings[vector_ratings != 0] # rating == 0 are NA values
+vector_ratings <- factor(vector_ratings)
+
+qplot(vector_ratings) + 
+  ggtitle("Distribution of the ratings")
+
+# Exploring viewings of movies:
+views_per_movie <- colCounts(ratingmat) # count views for each movie
+
+table_views <- data.frame(movie = names(views_per_movie),
+                          views = views_per_movie) # create dataframe of views
+table_views <- table_views[order(table_views$views, 
+                                 decreasing = TRUE), ] # sort by number of views
+
+ggplot(table_views[1:6, ], aes(x = movie, y = views)) +
+  geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_x_discrete(labels=subset(movies2, movies2$movieId == table_views$movie)$title) +
+  ggtitle("Number of views of the top movies")
+
+#Visualizing the matrix:
+image(ratingmat, main = "Heatmap of the rating matrix") # hard to read-too many dimensions
+image(ratingmat[1:10, 1:15], main = "Heatmap of the first rows and columns")
+image(ratingmat[rowCounts(ratingmat) > quantile(rowCounts(ratingmat), 0.99),
+                 colCounts(ratingmat) > quantile(colCounts(ratingmat), 0.99)], 
+      main = "Heatmap of the top users and movies")
+
+
 #Normalize the data
 ratingmat_norm <- normalize(ratingmat)
 image(ratingmat_norm[rowCounts(ratingmat_norm) > quantile(rowCounts(ratingmat_norm), 0.99),
@@ -165,6 +204,10 @@ recom <- predict(recommender_model,
 
 recom
 
+#recc_matrix <- sapply(recom@items, 
+#                      function(x){ colnames(ratingmat)[x] })
+#dim(recc_matrix)
+
 recom_list <- as(recom, 
                  "list") #convert recommenderlab object to readable list
 
@@ -175,4 +218,14 @@ for (i in 1:10){
                                          movies$movieId == as.integer(recom_list[[1]][i]))$title)
 }
 
+
+# Evaluation:
+evaluation_scheme <- evaluationScheme(ratingmat, 
+                                      method="cross-validation", 
+                                      k=5, given=3, 
+                                      goodRating=5) #k=5 meaning a 5-fold cross validation. given=3 meaning a Given-3 protocol
+evaluation_results <- evaluate(evaluation_scheme, 
+                               method="UBCF", 
+                               n=c(1,3,5,10,15,20))
+eval_results <- getConfusionMatrix(evaluation_results)[[1]]
 
